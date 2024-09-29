@@ -91,17 +91,32 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     """
     all_files = []
     for ext in LOADER_MAPPING:
-        all_files.extend(
-            glob.glob(os.path.join(source_dir, f"**/*{ext}"), recursive=True)
-        )
+        try:
+            all_files.extend(
+                glob.glob(os.path.join(source_dir, f"**/*{ext}"), recursive=True)
+            )
+        except Exception as e:
+            print(f"Error gathering documents: {str(e)}")
+            return []  # Return an empty list instead of crashing
+
     filtered_files = [file_path for file_path in all_files if file_path not in ignored_files]
 
     with Pool(processes=os.cpu_count()) as pool:
         results = []
         with tqdm(total=len(filtered_files), desc='Loading new documents', ncols=80) as pbar:
-            for i, docs in enumerate(pool.imap_unordered(load_single_document, filtered_files)):
-                results.extend(docs)
-                pbar.update()
+            for file_path in filtered_files:
+                try:
+                    docs = load_single_document(file_path)
+                    results.extend(docs)
+                    pbar.update()
+                except Exception as e:
+                    print(f"Error loading document {file_path}: {str(e)}")
+        
+        # Handle StopIteration exceptions outside the loop
+        try:
+            next(pool.imap_unordered(load_single_document, filtered_files))
+        except StopIteration:
+            pass  # This is okay, we've already processed all documents
 
     return results
 
